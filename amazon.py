@@ -6,6 +6,7 @@ import bottlenose
 import bs4
 import time
 from bs4 import BeautifulSoup
+import re
 
 
 def error_handler(err):
@@ -62,10 +63,11 @@ def fetch(asin, region):
     # print(soup.iframeurl.text)
 
     if review_avg_star_node is not None:
-        reviews_count = int(review_avg_star_node.find_all('a')[-1].text.split(' ')[0].replace(',', ''))
+        reviews_count = int(re.split("件| ", review_avg_star_node.find_all('a')[-1].text)[0].replace(',', ''))
         stars_ratio = review_soup.find_all('div', class_='histoCount')
     else:
         reviews_count = 0
+        stars_ratio = ['0'] * 5
 
     result = {}
     if soup.listprice is not None:
@@ -77,11 +79,11 @@ def fetch(asin, region):
     else:
         result["sale_price"] = None
     result["binding"] = soup.binding
-    result["star1"] = 0 if reviews_count is 0 else round(float(stars_ratio[4].text[0:-1]) / 100 * reviews_count)
-    result["star2"] = 0 if reviews_count is 0 else round(float(stars_ratio[3].text[0:-1]) / 100 * reviews_count)
-    result["star3"] = 0 if reviews_count is 0 else round(float(stars_ratio[2].text[0:-1]) / 100 * reviews_count)
-    result["star4"] = 0 if reviews_count is 0 else round(float(stars_ratio[1].text[0:-1]) / 100 * reviews_count)
-    result["star5"] = 0 if reviews_count is 0 else round(float(stars_ratio[0].text[0:-1]) / 100 * reviews_count)
+    result["star1"] = get_star_count(reviews_count, stars_ratio[4])
+    result["star2"] = get_star_count(reviews_count, stars_ratio[3])
+    result["star3"] = get_star_count(reviews_count, stars_ratio[2])
+    result["star4"] = get_star_count(reviews_count, stars_ratio[1])
+    result["star5"] = get_star_count(reviews_count, stars_ratio[0])
     result["total_reviews"] = reviews_count
     result["average_rating"] = 0 if reviews_count is 0 else \
         review_soup.find('span', class_='asinReviewsSummary').img.attrs['alt'].split(' ')[0]
@@ -96,6 +98,15 @@ def fetch(asin, region):
     return result
 
 
+def get_star_count(reviews_count, star_ratio):
+    if reviews_count == 0:
+        return 0
+    elif star_ratio.text.find('%') == -1:
+        return int(star_ratio.text)
+    else:
+        return round(int(star_ratio.text[0:-1]) / 100 * reviews_count)
+
+
 def to_list(product):
     result = [product['price'], product['sale_price'], product['binding'], product['star1'], product['star2'],
               product['star3'],
@@ -108,7 +119,7 @@ def to_list(product):
 
 def get_last_asin():
     try:
-        with open('output.csv', 'r') as file:
+        with open('output.csv', 'r', encoding='utf-8') as file:
             last_row = None
             for row_in_last_output in csv.reader(file):
                 last_row = row_in_last_output
