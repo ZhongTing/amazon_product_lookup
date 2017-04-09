@@ -8,19 +8,6 @@ import time
 from bs4 import BeautifulSoup
 
 
-def test():
-    amazonUs = bottlenose.Amazon("AKIAIN7FKTAMCSG7VVOA", "DtH54N5NoOX5tGDKZ5N8283IyfKzuOQ6fbg3KhC8", "gary62107-20")
-    amazonJp = bottlenose.Amazon("AKIAIN7FKTAMCSG7VVOA", "DtH54N5NoOX5tGDKZ5N8283IyfKzuOQ6fbg3KhC8", "gary62107-22",
-                                 Region="JP")
-    response = amazonUs.ItemLookup(ItemId="0060590327", ResponseGroup="Small")
-
-    response = str(response)
-    soup = BeautifulSoup(response, "lxml")
-    url = soup.find('detailpageurl').get_text()
-    response = urllib.request.urlopen(url).read()
-    soup = BeautifulSoup(response, "lxml")
-
-
 def error_handler(err):
     ex = err['exception']
     if isinstance(ex, HTTPError) and ex.code == 503:
@@ -43,14 +30,17 @@ def get_amazon_by_region(region):
 def fetch_review(url):
     while True:
         try:
-            print(url)
-            api_request = urllib.request.Request(url, headers={"Accept-Encoding": "gzip"})
-            review_response = urllib.request.urlopen(api_request, timeout=5).read()
+            api_request = urllib.request.Request(url, headers={
+                "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/42.0.2311.90 Safari/537.36"
+            })
+            resource = urllib.request.urlopen(api_request, timeout=5)
+            review_response = resource.read()
             review_soup = BeautifulSoup(review_response, "lxml")
             return review_soup
         except urllib.error.HTTPError as e:
             if e.code == 503:
                 time.sleep(random.expovariate(0.1))
+                print(url)
                 print('review 503')
             else:
                 return None
@@ -59,24 +49,29 @@ def fetch_review(url):
 def fetch(asin, region):
     amazon = get_amazon_by_region(region)
     if amazon is None:
-        return {"msg": "region code not valid"}
+        return {"error": "region code not valid"}
     response = amazon.ItemLookup(ItemId=asin, ResponseGroup="BrowseNodes,ItemAttributes,Offers,Reviews,SalesRank")
     soup = BeautifulSoup(response, "lxml")
     if soup.error is not None:
-        return {"msg": soup.error.message.get_text()}
+        return {"error": soup.error.message.get_text()}
 
     time.sleep(1)
     review_soup = fetch_review(soup.iframeurl.text)
     review_avg_star_node = review_soup.find('span', class_='crAvgStars')
+
+    # print(soup.iframeurl.text)
+
     if review_avg_star_node is not None:
-        reviews_count = int(review_avg_star_node.find_all('a')[-1].text.split(' ')[0])
+        reviews_count = int(review_avg_star_node.find_all('a')[-1].text.split(' ')[0].replace(',', ''))
         stars_ratio = review_soup.find_all('div', class_='histoCount')
     else:
         reviews_count = 0
-    # reviews_count = 0
 
     result = {}
-    result["price"] = soup.listprice.formattedprice
+    if soup.listprice is not None:
+        result["price"] = soup.listprice.formattedprice
+    else:
+        result['price'] = soup.formattedprice
     if soup.price is not None:
         result["sale_price"] = soup.price.formattedprice
     else:
@@ -88,7 +83,8 @@ def fetch(asin, region):
     result["star4"] = 0 if reviews_count is 0 else round(float(stars_ratio[1].text[0:-1]) / 100 * reviews_count)
     result["star5"] = 0 if reviews_count is 0 else round(float(stars_ratio[0].text[0:-1]) / 100 * reviews_count)
     result["total_reviews"] = reviews_count
-    result["average_rating"] = 0 if reviews_count is 0 else review_soup.find('span', class_='asinReviewsSummary').img.attrs['alt'].split(' ')[0]
+    result["average_rating"] = 0 if reviews_count is 0 else \
+        review_soup.find('span', class_='asinReviewsSummary').img.attrs['alt'].split(' ')[0]
     result["sales_rank"] = soup.salesrank
     result["release_date"] = soup.releasedate
     result["category"] = [node.find('name').text for node in soup.select("browsenodes > browsenode")]
@@ -123,8 +119,8 @@ def get_last_asin():
         return None
 
 
-def write_row(data):
-    with open('output.csv', 'a', encoding='utf-8') as output_file:
+def write_row(data, filename='output.csv'):
+    with open(filename, 'a', encoding='utf-8') as output_file:
         writer = csv.writer(output_file, lineterminator='\n')
         writer.writerow(data)
         output_file.close()
@@ -152,13 +148,17 @@ def main():
                 print(row)
                 data_dict = fetch(row[0], row[1])
                 print(data_dict)
-                data_list = to_list(data_dict)
-                write_row(row + data_list)
-                if i == 5:
+                if 'error' in data_dict.keys():
+                    write_row(row + [data_dict['error']])
+                    write_row(row + [data_dict['error']], filename='error.csv')
+                else:
+                    data_list = to_list(data_dict)
+                    write_row(row + data_list)
+                if i == 10000:
                     break
 
 
 if __name__ == '__main__':
     main()
-    # a = fetch("B002QD2Q06", "jp")
+    # a = fetch("0316000000", "us")
     # print(a)
