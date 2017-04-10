@@ -7,6 +7,7 @@ import bs4
 import time
 from bs4 import BeautifulSoup
 import re
+import codecs
 
 
 def error_handler(err):
@@ -44,7 +45,7 @@ def fetch_review(url):
                 print(url)
                 print('review 503')
             else:
-                return None
+                print(e)
 
 
 def fetch(asin, region):
@@ -60,7 +61,7 @@ def fetch(asin, region):
     review_soup = fetch_review(soup.iframeurl.text)
     review_avg_star_node = review_soup.find('span', class_='crAvgStars')
 
-    # print(soup.iframeurl.text)
+    print(soup.iframeurl.text)
 
     if review_avg_star_node is not None:
         reviews_count = int(re.split("件| ", review_avg_star_node.find_all('a')[-1].text)[0].replace(',', ''))
@@ -85,17 +86,27 @@ def fetch(asin, region):
     result["star4"] = get_star_count(reviews_count, stars_ratio[1])
     result["star5"] = get_star_count(reviews_count, stars_ratio[0])
     result["total_reviews"] = reviews_count
-    result["average_rating"] = 0 if reviews_count is 0 else \
-        review_soup.find('span', class_='asinReviewsSummary').img.attrs['alt'].split(' ')[0]
+    result["average_rating"] = get_average_rating(review_soup, reviews_count)
     result["sales_rank"] = soup.salesrank
     result["release_date"] = soup.releasedate
     result["category"] = [node.find('name').text for node in soup.select("browsenodes > browsenode")]
+    # jp return addition browse node
+    if 'Stores' in result['category']:
+        result["category"].remove('Stores')
     result["url"] = soup.detailpageurl
 
     for key, value in result.items():
         if isinstance(value, bs4.element.Tag):
             result[key] = value.text
     return result
+
+
+def get_average_rating(review_soup, reviews_count):
+    if reviews_count is 0:
+        return 0
+    else:
+        attr_alt_ = review_soup.find('span', class_='asinReviewsSummary').img.attrs['alt']
+        return re.search('\d+(\.\d+)', attr_alt_.replace('5', ''))[0]
 
 
 def get_star_count(reviews_count, star_ratio):
@@ -130,6 +141,11 @@ def get_last_asin():
         return None
 
 
+def write_bom(filename='output.csv'):
+    with open(filename, 'wb') as file:
+        file.write(codecs.BOM_UTF8)
+
+
 def write_row(data, filename='output.csv'):
     with open(filename, 'a', encoding='utf-8') as output_file:
         writer = csv.writer(output_file, lineterminator='\n')
@@ -142,6 +158,7 @@ def main():
     with open('asin.csv') as csv_file:
         reader = csv.reader(csv_file)
         if last_asin is None:
+            write_bom()
             write_row(['asin', 'country', 'price', 'sale_price', 'binding', 'star1', 'star2', 'star3', 'star4', 'star5',
                        'total_reviews',
                        'average_rating', 'sales_rank', 'release_date', 'category'])
@@ -170,6 +187,9 @@ def main():
 
 
 if __name__ == '__main__':
-    main()
-    # a = fetch("0316000000", "us")
-    # print(a)
+    try:
+        main()
+        # a = fetch("0316000000", "us")
+        # print(a)
+    except urllib.error.URLError:
+        print("please check your network")
