@@ -45,7 +45,7 @@ def fetch_review(url):
         except urllib.error.HTTPError as e:
             if e.code == 503:
                 time.sleep(random.expovariate(0.1))
-                print(url)
+                # print(url)
                 print('review 503')
             else:
                 print(e)
@@ -64,7 +64,7 @@ def fetch(asin, region):
     review_soup = fetch_review(soup.iframeurl.text)
     review_avg_star_node = review_soup.find('span', class_='crAvgStars')
 
-    print(soup.iframeurl.text)
+    # print(soup.iframeurl.text)
 
     if review_avg_star_node is not None:
         reviews_count = int(re.split("[件 ]", review_avg_star_node.find_all('a')[-1].text)[0].replace(',', ''))
@@ -96,7 +96,7 @@ def fetch(asin, region):
     # jp return addition browse node
     if 'Stores' in result['category']:
         result["category"].remove('Stores')
-    result["url"] = soup.detailpageurl
+    # result["url"] = soup.detailpageurl
 
     for key, value in result.items():
         if isinstance(value, bs4.element.Tag):
@@ -192,11 +192,11 @@ def main():
                 else:
                     data_list = to_list(data_dict)
                     write_row(row + data_list)
-                if i == 10000:
+                if i == 500:
                     break
 
 
-if __name__ == '__main__':
+if '__main__' in __name__:
     # noinspection PyUnresolvedReferences
     try:
         main()
