@@ -18,6 +18,7 @@ def error_handler(err):
         return True
 
 
+# noinspection SpellCheckingInspection
 def get_amazon_by_region(region):
     access_key = "AKIAIN7FKTAMCSG7VVOA"
     secret = "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"
@@ -31,9 +32,11 @@ def get_amazon_by_region(region):
 
 def fetch_review(url):
     while True:
+        # noinspection PyUnresolvedReferences
         try:
             api_request = urllib.request.Request(url, headers={
-                "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/42.0.2311.90 Safari/537.36"
+                "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) "
+                              "Chrome/42.0.2311.90 Safari/537.36 "
             })
             resource = urllib.request.urlopen(api_request, timeout=5)
             review_response = resource.read()
@@ -64,7 +67,7 @@ def fetch(asin, region):
     print(soup.iframeurl.text)
 
     if review_avg_star_node is not None:
-        reviews_count = int(re.split("件| ", review_avg_star_node.find_all('a')[-1].text)[0].replace(',', ''))
+        reviews_count = int(re.split("[件 ]", review_avg_star_node.find_all('a')[-1].text)[0].replace(',', ''))
         stars_ratio = review_soup.find_all('div', class_='histoCount')
     else:
         reviews_count = 0
@@ -106,7 +109,14 @@ def get_average_rating(review_soup, reviews_count):
         return 0
     else:
         attr_alt_ = review_soup.find('span', class_='asinReviewsSummary').img.attrs['alt']
-        return re.search('\d+(\.\d+)', attr_alt_.replace('5', ''))[0]
+        try:
+            average_rating = float(attr_alt_.split(' ')[0])
+            return average_rating
+        except ValueError:
+            try:
+                return float(attr_alt_.split(' ')[1])
+            except ValueError:
+                return 0
 
 
 def get_star_count(reviews_count, star_ratio):
@@ -187,6 +197,7 @@ def main():
 
 
 if __name__ == '__main__':
+    # noinspection PyUnresolvedReferences
     try:
         main()
         # a = fetch("0316000000", "us")
