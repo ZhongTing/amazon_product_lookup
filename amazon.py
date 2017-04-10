@@ -8,6 +8,7 @@ import time
 from bs4 import BeautifulSoup
 import re
 import codecs
+import os
 
 
 def error_handler(err):
@@ -194,6 +195,8 @@ def main():
                     write_row(row + data_list)
                 if i == 500:
                     break
+        if last_asin is not None:
+            print('目前的output.csv與asin.csv不一致，請將output.csv刪除或更名並重新執行程式')
 
 
 if '__main__' in __name__:
@@ -204,3 +207,13 @@ if '__main__' in __name__:
         # print(a)
     except urllib.error.URLError:
         print("please check your network")
+    finally:
+        i = 0
+        with open('output.csv', 'r') as file:
+            reader = csv.reader(file)
+            for row in reader:
+                i += 1
+        if i == 1:
+            os.remove('output.csv')
+
+    os.system("pause")
