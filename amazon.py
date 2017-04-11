@@ -92,7 +92,7 @@ def fetch(asin, region):
     result["total_reviews"] = reviews_count
     result["average_rating"] = get_average_rating(review_soup, reviews_count)
     result["sales_rank"] = soup.salesrank
-    result["release_date"] = soup.releasedate
+    result["release_date"] = soup.publicationdate
     result["category"] = [node.find('name').text for node in soup.select("browsenodes > browsenode")]
     # jp return addition browse node
     if 'Stores' in result['category']:
