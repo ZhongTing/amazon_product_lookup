@@ -5,7 +5,8 @@ from cx_Freeze import setup, Executable
 build_exe_options = {
 	"silent": False,
 	"packages": ["os", 'lxml', 'gzip'],
-	"excludes": ["tkinter"]
+	"excludes": ["tkinter"],
+	"include_files": ['asin.csv', 'amazon_end_with_pause.bat']
 }
 
 # GUI applications require a different base on Windows (the default is for a

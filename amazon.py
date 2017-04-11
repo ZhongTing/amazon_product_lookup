@@ -207,13 +207,17 @@ if '__main__' in __name__:
         # print(a)
     except urllib.error.URLError:
         print("please check your network")
+    except FileNotFoundError:
+        print("asin.csv file not found")
     finally:
-        i = 0
-        with open('output.csv', 'r', encoding='utf-8') as file:
-            reader = csv.reader(file)
-            for row in reader:
-                i += 1
-        if i == 1:
-            os.remove('output.csv')
-
+        try:
+            i = 0
+            with open('output.csv', 'r', encoding='utf-8') as file:
+                reader = csv.reader(file)
+                for row in reader:
+                    i += 1
+            if i == 1:
+                os.remove('output.csv')
+        except FileNotFoundError:
+            pass
     os.system("pause")
