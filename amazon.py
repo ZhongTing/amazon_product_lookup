@@ -203,13 +203,13 @@ if '__main__' in __name__:
     # noinspection PyUnresolvedReferences
     try:
         main()
-        # a = fetch("0316000000", "us")
+        # a = fetch("0299231909", "us")
         # print(a)
     except urllib.error.URLError:
         print("please check your network")
     finally:
         i = 0
-        with open('output.csv', 'r') as file:
+        with open('output.csv', 'r', encoding='utf-8') as file:
             reader = csv.reader(file)
             for row in reader:
                 i += 1
