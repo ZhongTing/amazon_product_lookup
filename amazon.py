@@ -65,7 +65,7 @@ def fetch(asin, region):
     review_soup = fetch_review(soup.iframeurl.text)
     review_avg_star_node = review_soup.find('span', class_='crAvgStars')
 
-    # print(soup.iframeurl.text)
+    print(soup.iframeurl.text)
 
     if review_avg_star_node is not None:
         reviews_count = int(re.split("[件 ]", review_avg_star_node.find_all('a')[-1].text)[0].replace(',', ''))
@@ -111,7 +111,12 @@ def fill_browse_node(result, soup):
         children_node = node.find('children')
         if children_node is not None:
             children_node.extract()
-        node.iscategoryroot.parent.find('name').extract()
+        root_name_node = node.iscategoryroot.parent.find('name')
+        print(root_name_node.text)
+        if root_name_node.text not in ['Subjects', 'Stores']:
+            continue
+        else:
+            root_name_node.extract()
         name_list = [name_node.text for name_node in node.find_all('name')]
         if len(name_list) > 0:
             department.append(name_list.pop())
@@ -233,7 +238,7 @@ if '__main__' in __name__:
     # noinspection PyUnresolvedReferences
     try:
         main()
-        # a = fetch("4000099434", "jp")
+        # a = fetch("0316009156", "us")
         # print(a)
     except urllib.error.URLError:
         print("please check your network")
