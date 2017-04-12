@@ -65,7 +65,7 @@ def fetch(asin, region):
     review_soup = fetch_review(soup.iframeurl.text)
     review_avg_star_node = review_soup.find('span', class_='crAvgStars')
 
-    print(soup.iframeurl.text)
+    # print(soup.iframeurl.text)
 
     if review_avg_star_node is not None:
         reviews_count = int(re.split("[件 ]", review_avg_star_node.find_all('a')[-1].text)[0].replace(',', ''))
@@ -112,8 +112,8 @@ def fill_browse_node(result, soup):
         if children_node is not None:
             children_node.extract()
         root_name_node = node.iscategoryroot.parent.find('name')
-        print(root_name_node.text)
-        if root_name_node.text not in ['Subjects', 'Stores']:
+        # print(root_name_node.text)
+        if root_name_node.text not in ['Subjects', 'ジャンル別']:
             continue
         else:
             root_name_node.extract()
