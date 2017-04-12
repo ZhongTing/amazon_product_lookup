@@ -93,16 +93,36 @@ def fetch(asin, region):
     result["average_rating"] = get_average_rating(review_soup, reviews_count)
     result["sales_rank"] = soup.salesrank
     result["release_date"] = soup.publicationdate
-    result["category"] = [node.find('name').text for node in soup.select("browsenodes > browsenode")]
-    # jp return addition browse node
-    if 'Stores' in result['category']:
-        result["category"].remove('Stores')
-    # result["url"] = soup.detailpageurl
+    fill_browse_node(result, soup)
 
     for key, value in result.items():
         if isinstance(value, bs4.element.Tag):
             result[key] = value.text
     return result
+
+
+def fill_browse_node(result, soup):
+    department = []
+    genre = []
+    category = []
+    for node in soup.select("browsenodes > browsenode"):
+        if node.iscategoryroot is None:
+            continue
+        children_node = node.find('children')
+        if children_node is not None:
+            children_node.extract()
+        node.iscategoryroot.parent.find('name').extract()
+        name_list = [name_node.text for name_node in node.find_all('name')]
+        if len(name_list) > 0:
+            department.append(name_list.pop())
+        if len(name_list) > 0:
+            genre.append(name_list.pop())
+        if len(name_list) > 0:
+            category.append(name_list[0])
+
+    result['department'] = list(set(department))
+    result['genre'] = list(set(genre))
+    result['category'] = list(set(category))
 
 
 def get_average_rating(review_soup, reviews_count):
@@ -131,11 +151,14 @@ def get_star_count(reviews_count, star_ratio):
 
 def to_list(product):
     result = [product['price'], product['sale_price'], product['binding'], product['star1'], product['star2'],
-              product['star3'],
-              product['star4'], product['star5'], product['total_reviews'], product['average_rating'],
+              product['star3'], product['star4'], product['star5'], product['total_reviews'], product['average_rating'],
               product['sales_rank'], product['release_date']]
-    result += product['category']
-    # result.append(product['url'])
+    department_list = [''] * 5
+    genre_list = [''] * 5
+    for k in range(5):
+        department_list[k] = product['department'][k] if k < len(product['department']) else ''
+        genre_list[k] = product['genre'][k] if k < len(product['genre']) else ''
+    result += department_list + genre_list + product['category']
     return result
 
 
@@ -158,10 +181,16 @@ def write_bom(filename='output.csv'):
 
 
 def write_row(data, filename='output.csv'):
-    with open(filename, 'a', encoding='utf-8') as output_file:
-        writer = csv.writer(output_file, lineterminator='\n')
-        writer.writerow(data)
-        output_file.close()
+    try:
+        with open(filename, 'a', encoding='utf-8') as output_file:
+            writer = csv.writer(output_file, lineterminator='\n')
+            writer.writerow(data)
+            output_file.close()
+    except IOError as e:
+        print(e)
+        print("請確認{} 沒有被另外一個程序使用")
+        os.system("pause")
+        write_row(data, filename)
 
 
 def main():
@@ -170,9 +199,10 @@ def main():
         reader = csv.reader(csv_file)
         if last_asin is None:
             write_bom()
-            write_row(['asin', 'country', 'price', 'sale_price', 'binding', 'star1', 'star2', 'star3', 'star4', 'star5',
-                       'total_reviews',
-                       'average_rating', 'sales_rank', 'release_date', 'category'])
+            headers = ['asin', 'country', 'price', 'sale_price', 'binding', 'star1', 'star2', 'star3', 'star4',
+                       'star5', 'total_reviews', 'average_rating', 'sales_rank', 'release_date', 'department']
+            headers += [''] * 4 + ['genre'] + [''] * 4 + ['category']
+            write_row(headers)
         i = 0
         for row in reader:
             row[0] = row[0].zfill(10)
@@ -203,7 +233,7 @@ if '__main__' in __name__:
     # noinspection PyUnresolvedReferences
     try:
         main()
-        # a = fetch("0299231909", "us")
+        # a = fetch("4000099434", "jp")
         # print(a)
     except urllib.error.URLError:
         print("please check your network")
