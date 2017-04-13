@@ -31,7 +31,7 @@ def get_amazon_by_region(region):
         return None
 
 
-def fetch_review(url):
+def open_url(url):
     while True:
         # noinspection PyUnresolvedReferences
         try:
@@ -61,12 +61,27 @@ def fetch(asin, region):
     if soup.error is not None:
         return {"error": soup.error.message.get_text()}
 
+    result = {
+        "binding": soup.binding,
+        "sales_rank": soup.salesrank,
+        "release_date": soup.publicationdate,
+        "price": soup.formattedprice if soup.listprice is None else soup.listprice.formattedprice,
+        "sale_price": None if soup.price is None else soup.price.formattedprice
+    }
+    result_reviews = fetch_reviews(soup.iframeurl.text)
+    result.update(result_reviews)
+    fill_browse_node(result, soup)
+
+    for key, value in result.items():
+        if isinstance(value, bs4.element.Tag):
+            result[key] = value.text
+    return result
+
+
+def fetch_reviews(iframe_url):
     time.sleep(1)
-    review_soup = fetch_review(soup.iframeurl.text)
+    review_soup = open_url(iframe_url)
     review_avg_star_node = review_soup.find('span', class_='crAvgStars')
-
-    # print(soup.iframeurl.text)
-
     if review_avg_star_node is not None:
         reviews_count = int(re.split("[件 ]", review_avg_star_node.find_all('a')[-1].text)[0].replace(',', ''))
         stars_ratio = review_soup.find_all('div', class_='histoCount')
@@ -74,31 +89,15 @@ def fetch(asin, region):
         reviews_count = 0
         stars_ratio = ['0'] * 5
 
-    result = {}
-    if soup.listprice is not None:
-        result["price"] = soup.listprice.formattedprice
-    else:
-        result['price'] = soup.formattedprice
-    if soup.price is not None:
-        result["sale_price"] = soup.price.formattedprice
-    else:
-        result["sale_price"] = None
-    result["binding"] = soup.binding
-    result["star1"] = get_star_count(reviews_count, stars_ratio[4])
-    result["star2"] = get_star_count(reviews_count, stars_ratio[3])
-    result["star3"] = get_star_count(reviews_count, stars_ratio[2])
-    result["star4"] = get_star_count(reviews_count, stars_ratio[1])
-    result["star5"] = get_star_count(reviews_count, stars_ratio[0])
-    result["total_reviews"] = reviews_count
-    result["average_rating"] = get_average_rating(review_soup, reviews_count)
-    result["sales_rank"] = soup.salesrank
-    result["release_date"] = soup.publicationdate
-    fill_browse_node(result, soup)
-
-    for key, value in result.items():
-        if isinstance(value, bs4.element.Tag):
-            result[key] = value.text
-    return result
+    return {
+        "star1": get_star_count(reviews_count, stars_ratio[4]),
+        "star2": get_star_count(reviews_count, stars_ratio[3]),
+        "star3": get_star_count(reviews_count, stars_ratio[2]),
+        "star4": get_star_count(reviews_count, stars_ratio[1]),
+        "star5": get_star_count(reviews_count, stars_ratio[0]),
+        "total_reviews": reviews_count,
+        "average_rating": get_average_rating(review_soup, reviews_count)
+    }
 
 
 def fill_browse_node(result, soup):
@@ -187,10 +186,10 @@ def write_bom(filename='output.csv'):
 
 def write_row(data, filename='output.csv'):
     try:
-        with open(filename, 'a', encoding='utf-8') as output_file:
-            writer = csv.writer(output_file, lineterminator='\n')
+        with open(filename, 'a', encoding='utf-8') as file:
+            writer = csv.writer(file, lineterminator='\n')
             writer.writerow(data)
-            output_file.close()
+            file.close()
     except IOError as e:
         print(e)
         print("請確認{} 沒有被另外一個程序使用")
@@ -201,7 +200,7 @@ def write_row(data, filename='output.csv'):
 def main():
     last_asin = get_last_asin()
     with open('asin.csv') as csv_file:
-        reader = csv.reader(csv_file)
+        asin_reader = csv.reader(csv_file)
         if last_asin is None:
             write_bom()
             headers = ['asin', 'country', 'price', 'sale_price', 'binding', 'star1', 'star2', 'star3', 'star4',
@@ -209,7 +208,7 @@ def main():
             headers += [''] * 4 + ['genre'] + [''] * 4 + ['category']
             write_row(headers)
         i = 0
-        for row in reader:
+        for row in asin_reader:
             row[0] = row[0].zfill(10)
             i += 1
             if i == 1:
@@ -246,12 +245,12 @@ if '__main__' in __name__:
         print("asin.csv file not found")
     finally:
         try:
-            i = 0
-            with open('output.csv', 'r', encoding='utf-8') as file:
-                reader = csv.reader(file)
-                for row in reader:
-                    i += 1
-            if i == 1:
+            row_count = 0
+            with open('output.csv', 'r', encoding='utf-8') as output_file:
+                reader = csv.reader(output_file)
+                for output_row in reader:
+                    row_count += 1
+            if row_count == 1:
                 os.remove('output.csv')
         except FileNotFoundError:
             pass
