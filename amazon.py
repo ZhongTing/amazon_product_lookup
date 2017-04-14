@@ -9,6 +9,7 @@ from bs4 import BeautifulSoup
 import re
 import codecs
 import os
+from socket import timeout
 
 
 def error_handler(err):
@@ -31,18 +32,23 @@ def get_amazon_by_region(region):
         return None
 
 
-def open_url(url):
+def open_url(url, cookies=None, markup="lxml"):
+    timeout_try_time = 3
     while True:
         # noinspection PyUnresolvedReferences
         try:
-            api_request = urllib.request.Request(url, headers={
-                "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) "
-                              "Chrome/42.0.2311.90 Safari/537.36 "
-            })
+            headers = {"User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) " \
+                                     "Chrome/42.0.2311.90 Safari/537.36 "}
+            if cookies is not None:
+                headers['Cookie'] = cookies
+                print('Cookie used')
+
+            api_request = urllib.request.Request(url, headers=headers)
             resource = urllib.request.urlopen(api_request, timeout=5)
+            cookies = resource.getheader('Set-Cookie')
             review_response = resource.read()
-            review_soup = BeautifulSoup(review_response, "lxml")
-            return review_soup
+            review_soup = BeautifulSoup(review_response, markup)
+            return review_soup, cookies
         except urllib.error.HTTPError as e:
             if e.code == 503:
                 time.sleep(random.expovariate(0.1))
@@ -50,16 +56,22 @@ def open_url(url):
                 print('review 503')
             else:
                 print(e)
+        except timeout as t:
+            timeout_try_time -= 1
+            if timeout_try_time < 0:
+                raise t
+            else:
+                continue
 
 
-def fetch(asin, region):
+def fetch(asin, region, cookie=None):
     amazon = get_amazon_by_region(region)
     if amazon is None:
-        return {"error": "region code not valid"}
+        return {"error": "region code not valid"}, cookie
     response = amazon.ItemLookup(ItemId=asin, ResponseGroup="BrowseNodes,ItemAttributes,Offers,Reviews,SalesRank")
     soup = BeautifulSoup(response, "lxml")
     if soup.error is not None:
-        return {"error": soup.error.message.get_text()}
+        return {"error": soup.error.message.get_text()}, cookie
 
     result = {
         "binding": soup.binding,
@@ -68,14 +80,15 @@ def fetch(asin, region):
         "price": soup.formattedprice if soup.listprice is None else soup.listprice.formattedprice,
         "sale_price": None if soup.price is None else soup.price.formattedprice
     }
-    result_reviews = fetch_reviews(soup.iframeurl.text)
+    # result_reviews = fetch_reviews(soup.iframeurl.text)
+    result_reviews, new_cookie = fetch_review_with_normal_url(asin, region, cookie)
     result.update(result_reviews)
     fill_browse_node(result, soup)
 
     for key, value in result.items():
         if isinstance(value, bs4.element.Tag):
             result[key] = value.text
-    return result
+    return result, new_cookie
 
 
 def fetch_reviews(iframe_url):
@@ -85,19 +98,46 @@ def fetch_reviews(iframe_url):
     if review_avg_star_node is not None:
         reviews_count = int(re.split("[件 ]", review_avg_star_node.find_all('a')[-1].text)[0].replace(',', ''))
         stars_ratio = review_soup.find_all('div', class_='histoCount')
+        average_rating = get_average_rating(review_soup.find('span', class_='asinReviewsSummary').img.attrs['alt'])
     else:
         reviews_count = 0
         stars_ratio = ['0'] * 5
+        average_rating = 0
 
     return {
-        "star1": get_star_count(reviews_count, stars_ratio[4]),
-        "star2": get_star_count(reviews_count, stars_ratio[3]),
-        "star3": get_star_count(reviews_count, stars_ratio[2]),
-        "star4": get_star_count(reviews_count, stars_ratio[1]),
-        "star5": get_star_count(reviews_count, stars_ratio[0]),
+        "star1": get_star_count(reviews_count, stars_ratio[4].text),
+        "star2": get_star_count(reviews_count, stars_ratio[3].text),
+        "star3": get_star_count(reviews_count, stars_ratio[2].text),
+        "star4": get_star_count(reviews_count, stars_ratio[1].text),
+        "star5": get_star_count(reviews_count, stars_ratio[0].text),
         "total_reviews": reviews_count,
-        "average_rating": get_average_rating(review_soup, reviews_count)
+        "average_rating": average_rating
     }
+
+
+def fetch_review_with_normal_url(asin, region, cookie):
+    domain = "com" if region == "us" else "co.jp"
+    review_url = "https://www.amazon.{}/reviews/{}".format(domain, asin)
+    review_soup, new_cookie = open_url(review_url, cookie)
+    review_block = review_soup.find('div', class_='reviewNumericalSummary')
+    if review_block is not None:
+        reviews_count = int(review_block.find('span', class_='totalReviewCount').text.replace(',', ''))
+        average_rating = get_average_rating(review_block.find('div', class_='averageStarRatingNumerical').span.text)
+        stars_ratio = [row.find_all('td')[-1].text for row in review_block.find_all('tr', class_='a-histogram-row')]
+    else:
+        reviews_count = None
+        average_rating = None
+        stars_ratio = [''] * 5
+
+    return {
+               "star1": get_star_count(reviews_count, stars_ratio[4]),
+               "star2": get_star_count(reviews_count, stars_ratio[3]),
+               "star3": get_star_count(reviews_count, stars_ratio[2]),
+               "star4": get_star_count(reviews_count, stars_ratio[1]),
+               "star5": get_star_count(reviews_count, stars_ratio[0]),
+               "total_reviews": reviews_count,
+               "average_rating": average_rating
+           }, new_cookie
 
 
 def fill_browse_node(result, soup):
@@ -112,7 +152,7 @@ def fill_browse_node(result, soup):
             children_node.extract()
         root_name_node = node.iscategoryroot.parent.find('name')
         # print(root_name_node.text)
-        if root_name_node.text not in ['Subjects', 'ジャンル別']:
+        if root_name_node.text not in ['Departments', 'Subjects', 'ジャンル別']:
             continue
         else:
             root_name_node.extract()
@@ -129,28 +169,26 @@ def fill_browse_node(result, soup):
     result['category'] = list(set(category))
 
 
-def get_average_rating(review_soup, reviews_count):
-    if reviews_count is 0:
-        return 0
-    else:
-        attr_alt_ = review_soup.find('span', class_='asinReviewsSummary').img.attrs['alt']
+def get_average_rating(origin_text):
+    try:
+        average_rating = float(origin_text.split(' ')[0])
+        return average_rating
+    except ValueError:
         try:
-            average_rating = float(attr_alt_.split(' ')[0])
-            return average_rating
+            return float(re.split('[ち ]', origin_text)[1])
         except ValueError:
-            try:
-                return float(attr_alt_.split(' ')[1])
-            except ValueError:
-                return 0
+            return 0
 
 
-def get_star_count(reviews_count, star_ratio):
+def get_star_count(reviews_count, star_ratio_text):
     if reviews_count == 0:
         return 0
-    elif star_ratio.text.find('%') == -1:
-        return int(star_ratio.text)
+    elif reviews_count is None:
+        return None
+    elif star_ratio_text.find('%') == -1:
+        return int(star_ratio_text)
     else:
-        return round(int(star_ratio.text[0:-1]) / 100 * reviews_count)
+        return round(int(star_ratio_text[0:-1]) / 100 * reviews_count)
 
 
 def to_list(product):
@@ -197,8 +235,44 @@ def write_row(data, filename='output.csv'):
         write_row(data, filename)
 
 
+def get_proxy_list():
+    proxy_list = []
+    soup, cookies = open_url("http://www.us-proxy.org", "")
+    for tr in soup.table.find_all('tr')[1:-1]:
+        tds = tr.find_all('td')
+        if tds[6].text == "yes":
+            proxy_list.append("{}:{}".format(tds[0].text, tds[1].text))
+    return proxy_list
+
+
+used_proxy_list = []
+
+
+def change_proxy():
+    proxy_candidate = get_proxy_list()
+    if len(proxy_candidate) == 0:
+        print("no available proxy")
+        return
+    try:
+        proxy_ip = list(set(proxy_candidate).difference(set(used_proxy_list))).pop()
+    except IndexError:
+        print("proxy list has all been used")
+        used_proxy_list.clear()
+        proxy_ip = random.choice(proxy_candidate)
+    proxy = urllib.request.ProxyHandler({'https': proxy_ip})
+    opener = urllib.request.build_opener(proxy)
+    urllib.request.install_opener(opener)
+    print("using proxy {}".format(proxy_ip))
+    used_proxy_list.append(proxy_ip)
+    try:
+        open_url("https://www.amazon.co.jp")
+    except (urllib.error.HTTPError, timeout):
+        change_proxy()
+
+
 def main():
     last_asin = get_last_asin()
+    cookie = None
     with open('asin.csv') as csv_file:
         asin_reader = csv.reader(csv_file)
         if last_asin is None:
@@ -219,15 +293,20 @@ def main():
                 continue
             else:
                 print(row)
-                data_dict = fetch(row[0], row[1])
+                data_dict, new_cookie = fetch(row[0], row[1], cookie)
+                cookie = new_cookie
                 print(data_dict)
+
+                if "total_reviews" in data_dict.keys() and data_dict['total_reviews'] is None:
+                    change_proxy()
+                    cookie = None
                 if 'error' in data_dict.keys():
                     write_row(row + [data_dict['error']])
                     write_row(row + [data_dict['error']], filename='error.csv')
                 else:
                     data_list = to_list(data_dict)
                     write_row(row + data_list)
-                if i == 500:
+                if i == 50000:
                     break
         if last_asin is not None:
             print('目前的output.csv與asin.csv不一致，請將output.csv刪除或更名並重新執行程式')
@@ -239,8 +318,10 @@ if '__main__' in __name__:
         main()
         # a = fetch("0316009156", "us")
         # print(a)
-    except urllib.error.URLError:
+    except urllib.error.URLError as e:
+        print(e)
         print("please check your network")
+        print("use proxy {}".format(used_proxy_list[-1]))
     except FileNotFoundError:
         print("asin.csv file not found")
     finally:
