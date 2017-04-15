@@ -1,4 +1,5 @@
 import random
+import socket
 import urllib.request
 import csv
 from urllib.error import HTTPError
@@ -9,14 +10,13 @@ from bs4 import BeautifulSoup
 import re
 import codecs
 import os
-from socket import timeout
 
 
 def error_handler(err):
     ex = err['exception']
     if isinstance(ex, HTTPError) and ex.code == 503:
         time.sleep(random.expovariate(0.1))
-        print("503 retry")
+        print("API 503 service unavailable, retry...")
         return True
 
 
@@ -32,8 +32,7 @@ def get_amazon_by_region(region):
         return None
 
 
-def open_url(url, cookies=None, markup="lxml"):
-    timeout_try_time = 3
+def open_url(url, cookies=None, error_retry=2):
     while True:
         # noinspection PyUnresolvedReferences
         try:
@@ -41,25 +40,23 @@ def open_url(url, cookies=None, markup="lxml"):
                                      "Chrome/42.0.2311.90 Safari/537.36 "}
             if cookies is not None:
                 headers['Cookie'] = cookies
-                print('Cookie used')
 
             api_request = urllib.request.Request(url, headers=headers)
             resource = urllib.request.urlopen(api_request, timeout=5)
             cookies = resource.getheader('Set-Cookie')
             review_response = resource.read()
-            review_soup = BeautifulSoup(review_response, markup)
+            review_soup = BeautifulSoup(review_response, "lxml")
             return review_soup, cookies
-        except urllib.error.HTTPError as e:
-            if e.code == 503:
+        except urllib.error.HTTPError as url_http_error:
+            if url_http_error.code == 503:
                 time.sleep(random.expovariate(0.1))
-                # print(url)
-                print('review 503')
+                print('url request 503, retry...')
             else:
-                print(e)
-        except timeout as t:
-            timeout_try_time -= 1
-            if timeout_try_time < 0:
-                raise t
+                print(url_http_error)
+        except (urllib.error.URLError, socket.timeout) as url_error:
+            error_retry -= 1
+            if error_retry < 0:
+                raise url_error
             else:
                 continue
 
@@ -152,10 +149,10 @@ def fill_browse_node(result, soup):
             children_node.extract()
         root_name_node = node.iscategoryroot.parent.find('name')
         # print(root_name_node.text)
-        if root_name_node.text not in ['Departments', 'Subjects', 'ジャンル別']:
-            continue
-        else:
-            root_name_node.extract()
+        # if root_name_node.text not in ['Departments', 'Subjects', 'ジャンル別', "Styles"]:
+        #     continue
+        # else:
+        root_name_node.extract()
         name_list = [name_node.text for name_node in node.find_all('name')]
         if len(name_list) > 0:
             department.append(name_list.pop())
@@ -230,19 +227,22 @@ def write_row(data, filename='output.csv'):
             file.close()
     except IOError as e:
         print(e)
-        print("請確認{} 沒有被另外一個程序使用")
+        print("請確認{} 沒有被另外一個程序使用".format(filename))
         os.system("pause")
         write_row(data, filename)
 
 
 def get_proxy_list():
     proxy_list = []
-    soup, cookies = open_url("http://www.us-proxy.org", "")
+    proxy_list_url = "http://www.us-proxy.org"
+    soup, cookies = open_url(proxy_list_url)
     for tr in soup.table.find_all('tr')[1:-1]:
         tds = tr.find_all('td')
         if tds[6].text == "yes":
             proxy_list.append("{}:{}".format(tds[0].text, tds[1].text))
+    print("got {} proxies from {}".format(len(proxy_list), proxy_list_url))
     return proxy_list
+    # return ['104.236.203.134:8080']
 
 
 used_proxy_list = []
@@ -265,8 +265,8 @@ def change_proxy():
     print("using proxy {}".format(proxy_ip))
     used_proxy_list.append(proxy_ip)
     try:
-        open_url("https://www.amazon.co.jp")
-    except (urllib.error.HTTPError, timeout):
+        open_url("https://www.amazon.co.jp", error_retry=0)
+    except (urllib.error.HTTPError, urllib.error.URLError, socket.timeout):
         change_proxy()
 
 
@@ -285,7 +285,7 @@ def main():
         for row in asin_reader:
             row[0] = row[0].zfill(10)
             i += 1
-            if i == 1:
+            if i <= 1:
                 continue
             if last_asin is not None:
                 if row[0] == last_asin:
@@ -306,7 +306,7 @@ def main():
                 else:
                     data_list = to_list(data_dict)
                     write_row(row + data_list)
-                if i == 50000:
+                if i == 1000:
                     break
         if last_asin is not None:
             print('目前的output.csv與asin.csv不一致，請將output.csv刪除或更名並重新執行程式')
@@ -315,13 +315,21 @@ def main():
 if '__main__' in __name__:
     # noinspection PyUnresolvedReferences
     try:
-        main()
-        # a = fetch("0316009156", "us")
-        # print(a)
+        change_proxy()
+        error_counter = 2
+        while error_counter > 0:
+            # noinspection PyBroadException
+            try:
+                main()
+                # a = fetch("0316009156", "us")
+                # print(a)
+            except:
+                error_counter -= 1
+                pass
+
     except urllib.error.URLError as e:
         print(e)
         print("please check your network")
-        print("use proxy {}".format(used_proxy_list[-1]))
     except FileNotFoundError:
         print("asin.csv file not found")
     finally:
@@ -335,4 +343,5 @@ if '__main__' in __name__:
                 os.remove('output.csv')
         except FileNotFoundError:
             pass
+    print("use proxy {}".format(used_proxy_list[-1]))
     os.system("pause")
