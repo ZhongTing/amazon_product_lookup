@@ -325,7 +325,8 @@ if '__main__' in __name__:
         try:
             change_proxy()
             main()
-            # a = fetch("0316009156", "us")
+            print("所有ASIN已經抓取完畢，程式結束")
+            # a = fetch("B001Y7SITI", "us")
             # print(a)
             break
         except urllib.error.URLError as e:
@@ -337,17 +338,16 @@ if '__main__' in __name__:
         except Exception as unknown_error:
             print("Unexpected error {}".format(unknown_error))
             print(traceback.format_exc())
-
-    # delete output.csv if no data writen
-    try:
-        row_count = 0
-        with open('output.csv', 'r', encoding='utf-8') as output_file:
-            reader = csv.reader(output_file)
-            for output_row in reader:
-                row_count += 1
-        if row_count == 1:
-            os.remove('output.csv')
-    except FileNotFoundError:
-        pass
+        # delete output.csv if no data writen
+        try:
+            row_count = 0
+            with open('output.csv', 'r', encoding='utf-8') as output_file:
+                reader = csv.reader(output_file)
+                for output_row in reader:
+                    row_count += 1
+            if row_count == 1:
+                os.remove('output.csv')
+        except FileNotFoundError:
+            pass
     print("last used proxy is {}".format(used_proxy_list[-1]))
     os.system("pause")
