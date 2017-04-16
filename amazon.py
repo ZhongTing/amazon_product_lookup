@@ -1,5 +1,6 @@
 import random
 import socket
+import traceback
 import urllib.request
 import csv
 from urllib.error import HTTPError
@@ -18,6 +19,9 @@ def error_handler(err):
         time.sleep(random.expovariate(0.1))
         print("API 503 service unavailable, retry...")
         return True
+    else:
+        print("API response error")
+        print(ex)
 
 
 # noinspection SpellCheckingInspection
@@ -54,6 +58,7 @@ def open_url(url, cookies=None, error_retry=2):
             else:
                 print(url_http_error)
         except (urllib.error.URLError, socket.timeout) as url_error:
+            print('url request error or timeout, retrying')
             error_retry -= 1
             if error_retry < 0:
                 raise url_error
@@ -306,7 +311,9 @@ def main():
                 else:
                     data_list = to_list(data_dict)
                     write_row(row + data_list)
-                if i == 1000:
+                data_limit = 3500
+                if i >= data_limit:
+                    print("試用版只能抓取{}筆資料，程序中止。".format(data_limit))
                     break
         if last_asin is not None:
             print('目前的output.csv與asin.csv不一致，請將output.csv刪除或更名並重新執行程式')
@@ -314,34 +321,33 @@ def main():
 
 if '__main__' in __name__:
     # noinspection PyUnresolvedReferences
-    try:
-        change_proxy()
-        error_counter = 2
-        while error_counter > 0:
-            # noinspection PyBroadException
-            try:
-                main()
-                # a = fetch("0316009156", "us")
-                # print(a)
-            except:
-                error_counter -= 1
-                pass
-
-    except urllib.error.URLError as e:
-        print(e)
-        print("please check your network")
-    except FileNotFoundError:
-        print("asin.csv file not found")
-    finally:
+    while True:
         try:
-            row_count = 0
-            with open('output.csv', 'r', encoding='utf-8') as output_file:
-                reader = csv.reader(output_file)
-                for output_row in reader:
-                    row_count += 1
-            if row_count == 1:
-                os.remove('output.csv')
+            change_proxy()
+            main()
+            # a = fetch("0316009156", "us")
+            # print(a)
+            break
+        except urllib.error.URLError as e:
+            print(e)
+            print("please check your network")
         except FileNotFoundError:
-            pass
-    print("use proxy {}".format(used_proxy_list[-1]))
+            print("asin.csv file not found")
+            break
+        except Exception as unknown_error:
+            print("Unexpected error {}".format(unknown_error))
+            print(traceback.format_exc())
+
+    # delete output.csv if no data writen
+    try:
+        row_count = 0
+        with open('output.csv', 'r', encoding='utf-8') as output_file:
+            reader = csv.reader(output_file)
+            for output_row in reader:
+                row_count += 1
+        if row_count == 1:
+            os.remove('output.csv')
+    except FileNotFoundError:
+        pass
+    print("last used proxy is {}".format(used_proxy_list[-1]))
     os.system("pause")
