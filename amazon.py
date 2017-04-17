@@ -7,6 +7,7 @@ from urllib.error import HTTPError
 import bottlenose
 import bs4
 import time
+import sys
 from bs4 import BeautifulSoup
 import re
 import codecs
@@ -17,11 +18,11 @@ def error_handler(err):
     ex = err['exception']
     if isinstance(ex, HTTPError) and ex.code == 503:
         time.sleep(random.expovariate(0.1))
-        print("API 503 service unavailable, retry...")
+        print_to_terminal("API 503 service unavailable, retry...")
         return True
     else:
-        print("API response error")
-        print(ex)
+        print_to_terminal("API response error")
+        print_to_terminal(ex)
 
 
 # noinspection SpellCheckingInspection
@@ -40,8 +41,9 @@ def open_url(url, cookies=None, error_retry=2):
     while True:
         # noinspection PyUnresolvedReferences
         try:
-            headers = {"User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) " \
-                                     "Chrome/42.0.2311.90 Safari/537.36 "}
+            headers = {
+                "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) "
+                              "Chrome/42.0.2311.90 Safari/537.36 "}
             if cookies is not None:
                 headers['Cookie'] = cookies
 
@@ -54,11 +56,11 @@ def open_url(url, cookies=None, error_retry=2):
         except urllib.error.HTTPError as url_http_error:
             if url_http_error.code == 503:
                 time.sleep(random.expovariate(0.1))
-                print('url request 503, retry...')
+                print_to_terminal('url request 503, retry...')
             else:
-                print(url_http_error)
+                print_to_terminal(url_http_error)
         except (urllib.error.URLError, socket.timeout) as url_error:
-            print('url request error or timeout, retrying')
+            print_to_terminal('url request error or timeout, retrying')
             error_retry -= 1
             if error_retry < 0:
                 raise url_error
@@ -153,7 +155,7 @@ def fill_browse_node(result, soup):
         if children_node is not None:
             children_node.extract()
         root_name_node = node.iscategoryroot.parent.find('name')
-        # print(root_name_node.text)
+        # print_to_terminal(root_name_node.text)
         # if root_name_node.text not in ['Departments', 'Subjects', 'ジャンル別', "Styles"]:
         #     continue
         # else:
@@ -230,11 +232,16 @@ def write_row(data, filename='output.csv'):
             writer = csv.writer(file, lineterminator='\n')
             writer.writerow(data)
             file.close()
-    except IOError as e:
-        print(e)
-        print("請確認{} 沒有被另外一個程序使用".format(filename))
+    except IOError as io_error:
+        print_to_terminal(io_error)
+        print_to_terminal("請確認{} 沒有被另外一個程序使用".format(filename))
         os.system("pause")
         write_row(data, filename)
+
+
+def print_to_terminal(message):
+    message = str(message).encode(sys.stdin.encoding, 'ignore').decode(sys.stdin.encoding)
+    print(message)
 
 
 def get_proxy_list():
@@ -245,7 +252,7 @@ def get_proxy_list():
         tds = tr.find_all('td')
         if tds[6].text == "yes":
             proxy_list.append("{}:{}".format(tds[0].text, tds[1].text))
-    print("got {} proxies from {}".format(len(proxy_list), proxy_list_url))
+    print_to_terminal("got {} proxies from {}".format(len(proxy_list), proxy_list_url))
     return proxy_list
     # return ['104.236.203.134:8080']
 
@@ -256,18 +263,18 @@ used_proxy_list = []
 def change_proxy():
     proxy_candidate = get_proxy_list()
     if len(proxy_candidate) == 0:
-        print("no available proxy")
+        print_to_terminal("no available proxy")
         return
     try:
         proxy_ip = list(set(proxy_candidate).difference(set(used_proxy_list))).pop()
     except IndexError:
-        print("proxy list has all been used")
+        print_to_terminal("proxy list has all been used")
         used_proxy_list.clear()
         proxy_ip = random.choice(proxy_candidate)
     proxy = urllib.request.ProxyHandler({'https': proxy_ip})
     opener = urllib.request.build_opener(proxy)
     urllib.request.install_opener(opener)
-    print("using proxy {}".format(proxy_ip))
+    print_to_terminal("using proxy {}".format(proxy_ip))
     used_proxy_list.append(proxy_ip)
     try:
         open_url("https://www.amazon.co.jp", error_retry=0)
@@ -297,10 +304,10 @@ def main():
                     last_asin = None
                 continue
             else:
-                print(row)
+                print_to_terminal(row)
                 data_dict, new_cookie = fetch(row[0], row[1], cookie)
                 cookie = new_cookie
-                print(data_dict)
+                print_to_terminal(data_dict)
 
                 if "total_reviews" in data_dict.keys() and data_dict['total_reviews'] is None:
                     change_proxy()
@@ -313,10 +320,10 @@ def main():
                     write_row(row + data_list)
                 data_limit = 3500
                 if i >= data_limit:
-                    print("試用版只能抓取{}筆資料，程序中止。".format(data_limit))
+                    print_to_terminal("試用版只能抓取{}筆資料，程序中止。".format(data_limit))
                     break
         if last_asin is not None:
-            print('目前的output.csv與asin.csv不一致，請將output.csv刪除或更名並重新執行程式')
+            print_to_terminal('目前的output.csv與asin.csv不一致，請將output.csv刪除或更名並重新執行程式')
 
 
 if '__main__' in __name__:
@@ -325,19 +332,19 @@ if '__main__' in __name__:
         try:
             change_proxy()
             main()
-            print("所有ASIN已經抓取完畢，程式結束")
-            # a = fetch("B001Y7SITI", "us")
-            # print(a)
+            print_to_terminal("所有ASIN已經抓取完畢，程式結束")
+            # a = fetch("B00ITI", "jp")
+            # print_to_terminal(a)
             break
         except urllib.error.URLError as e:
-            print(e)
-            print("please check your network")
+            print_to_terminal(e)
+            print_to_terminal("please check your network")
         except FileNotFoundError:
-            print("asin.csv file not found")
+            print_to_terminal("asin.csv file not found")
             break
         except Exception as unknown_error:
-            print("Unexpected error {}".format(unknown_error))
-            print(traceback.format_exc())
+            print_to_terminal("Unexpected error {}".format(unknown_error))
+            print_to_terminal(traceback.format_exc())
         # delete output.csv if no data writen
         try:
             row_count = 0
@@ -349,5 +356,6 @@ if '__main__' in __name__:
                 os.remove('output.csv')
         except FileNotFoundError:
             pass
-    print("last used proxy is {}".format(used_proxy_list[-1]))
+    if len(used_proxy_list) > 0:
+        print_to_terminal("last used proxy is {}".format(used_proxy_list[-1]))
     os.system("pause")
