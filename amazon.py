@@ -82,7 +82,8 @@ def fetch(asin, region, cookie=None):
     result = {
         "binding": soup.binding,
         "sales_rank": soup.salesrank,
-        "release_date": soup.publicationdate,
+        "release_date": soup.releasedate,
+        "publication_date": soup.publicationdate,
         "price": soup.formattedprice if soup.listprice is None else soup.listprice.formattedprice,
         "sale_price": None if soup.price is None else soup.price.formattedprice
     }
@@ -200,7 +201,7 @@ def get_star_count(reviews_count, star_ratio_text):
 def to_list(product):
     result = [product['price'], product['sale_price'], product['binding'], product['star1'], product['star2'],
               product['star3'], product['star4'], product['star5'], product['total_reviews'], product['average_rating'],
-              product['sales_rank'], product['release_date']]
+              product['sales_rank'], product['release_date'], product['publication_date']]
     department_list = [''] * 5
     genre_list = [''] * 5
     for k in range(5):
@@ -291,8 +292,9 @@ def main():
         asin_reader = csv.reader(csv_file)
         if last_asin is None:
             write_bom()
-            headers = ['asin', 'country', 'price', 'sale_price', 'binding', 'star1', 'star2', 'star3', 'star4',
-                       'star5', 'total_reviews', 'average_rating', 'sales_rank', 'release_date', 'department']
+            headers = ['asin', 'country', 'price', 'sale_price', 'binding', 'star1', 'star2', 'star3', 'star4', 'star5',
+                       'total_reviews', 'average_rating', 'sales_rank', 'release_date', 'publication_date',
+                       'department']
             headers += [''] * 4 + ['genre'] + [''] * 4 + ['category']
             write_row(headers)
         i = 0
@@ -310,14 +312,7 @@ def main():
                 data_dict, new_cookie = fetch(row[0], row[1], cookie)
                 cookie = new_cookie
                 print_to_terminal(data_dict)
-                # noinspection PyBroadException
-                try:
-                    analytics.track(track_user_id, 'lookup', {
-                        'asin': row[0],
-                        'region': row[1]
-                    })
-                except Exception:
-                    pass
+                track_event(row)
 
                 if "total_reviews" in data_dict.keys() and data_dict['total_reviews'] is None:
                     change_proxy()
@@ -334,6 +329,17 @@ def main():
                     break
         if last_asin is not None:
             print_to_terminal('目前的output.csv與asin.csv不一致，請將output.csv刪除或更名並重新執行程式')
+
+
+def track_event(row):
+    # noinspection PyBroadException
+    try:
+        analytics.track(track_user_id, 'lookup', {
+            'asin': row[0],
+            'region': row[1]
+        })
+    except Exception:
+        pass
 
 
 if '__main__' in __name__:
