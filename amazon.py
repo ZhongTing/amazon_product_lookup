@@ -4,6 +4,8 @@ import traceback
 import urllib.request
 import csv
 from urllib.error import HTTPError
+
+import analytics
 import bottlenose
 import bs4
 import time
@@ -308,6 +310,14 @@ def main():
                 data_dict, new_cookie = fetch(row[0], row[1], cookie)
                 cookie = new_cookie
                 print_to_terminal(data_dict)
+                # noinspection PyBroadException
+                try:
+                    analytics.track(track_user_id, 'lookup', {
+                        'asin': row[0],
+                        'region': row[1]
+                    })
+                except Exception:
+                    pass
 
                 if "total_reviews" in data_dict.keys() and data_dict['total_reviews'] is None:
                     change_proxy()
@@ -328,6 +338,8 @@ def main():
 
 if '__main__' in __name__:
     # noinspection PyUnresolvedReferences
+    analytics.write_key = '5XW50UxmyJ8ZqFMhatdZuv1zR0j5E8Cl'
+    track_user_id = 'miss_lin'
     while True:
         try:
             change_proxy()
