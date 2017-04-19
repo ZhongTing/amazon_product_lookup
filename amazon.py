@@ -87,7 +87,6 @@ def fetch(asin, region, cookie=None):
         "price": soup.formattedprice if soup.listprice is None else soup.listprice.formattedprice,
         "sale_price": None if soup.price is None else soup.price.formattedprice
     }
-    # result_reviews = fetch_reviews(soup.iframeurl.text)
     result_reviews, new_cookie = fetch_review_with_normal_url(asin, region, cookie)
     result.update(result_reviews)
     fill_browse_node(result, soup)
@@ -96,30 +95,6 @@ def fetch(asin, region, cookie=None):
         if isinstance(value, bs4.element.Tag):
             result[key] = value.text
     return result, new_cookie
-
-
-def fetch_reviews(iframe_url):
-    time.sleep(1)
-    review_soup = open_url(iframe_url)
-    review_avg_star_node = review_soup.find('span', class_='crAvgStars')
-    if review_avg_star_node is not None:
-        reviews_count = int(re.split("[件 ]", review_avg_star_node.find_all('a')[-1].text)[0].replace(',', ''))
-        stars_ratio = review_soup.find_all('div', class_='histoCount')
-        average_rating = get_average_rating(review_soup.find('span', class_='asinReviewsSummary').img.attrs['alt'])
-    else:
-        reviews_count = 0
-        stars_ratio = ['0'] * 5
-        average_rating = 0
-
-    return {
-        "star1": get_star_count(reviews_count, stars_ratio[4].text),
-        "star2": get_star_count(reviews_count, stars_ratio[3].text),
-        "star3": get_star_count(reviews_count, stars_ratio[2].text),
-        "star4": get_star_count(reviews_count, stars_ratio[1].text),
-        "star5": get_star_count(reviews_count, stars_ratio[0].text),
-        "total_reviews": reviews_count,
-        "average_rating": average_rating
-    }
 
 
 def fetch_review_with_normal_url(asin, region, cookie):
@@ -158,10 +133,6 @@ def fill_browse_node(result, soup):
         if children_node is not None:
             children_node.extract()
         root_name_node = node.iscategoryroot.parent.find('name')
-        # print_to_terminal(root_name_node.text)
-        # if root_name_node.text not in ['Departments', 'Subjects', 'ジャンル別', "Styles"]:
-        #     continue
-        # else:
         root_name_node.extract()
         name_list = [name_node.text for name_node in node.find_all('name')]
         if len(name_list) > 0:
@@ -257,7 +228,6 @@ def get_proxy_list():
             proxy_list.append("{}:{}".format(tds[0].text, tds[1].text))
     print_to_terminal("got {} proxies from {}".format(len(proxy_list), proxy_list_url))
     return proxy_list
-    # return ['104.236.203.134:8080']
 
 
 used_proxy_list = []
@@ -323,10 +293,10 @@ def main():
                 else:
                     data_list = to_list(data_dict)
                     write_row(row + data_list)
-                data_limit = 3500
-                if i >= data_limit:
-                    print_to_terminal("試用版只能抓取{}筆資料，程序中止。".format(data_limit))
-                    break
+                    # data_limit = 3500
+                    # if i >= data_limit:
+                    #     print_to_terminal("試用版只能抓取{}筆資料，程序中止。".format(data_limit))
+                    #     break
         if last_asin is not None:
             print_to_terminal('目前的output.csv與asin.csv不一致，請將output.csv刪除或更名並重新執行程式')
 
